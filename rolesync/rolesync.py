@@ -181,6 +181,51 @@ class RoleSync(commands.Cog):
                         await m.remove_roles(to_add, reason=f"RoleSync: user does not have {to_check.name} in {other_server.name}")
 
         return await ctx.send(f"Force synced {name} for {counter} users on this server.")
+    
+    @commands.bot_has_permissions(manage_roles=True)
+    @_role_sync.command(name="forcesyncallguilds")
+    async def _force_sync_all_guilds(self, ctx: commands.Context, enter_true_to_confirm: bool, remove_role: bool = False):
+        """Force a manual check of all RoleSync roles for all server members of all RoleSync Guilds."""
+        if not enter_true_to_confirm:
+            return await ctx.send("Please enter `True` to confirm!")
+
+        settings = await self.config.guild(ctx.guild).roles()
+
+        await ctx.send("Forced sync has started, this may take a while...")
+
+        for name in settings.keys():
+            await self._sync_roleb(ctx, settings, name, remove_role)
+
+    async def _sync_roleb(self, ctx: commands.Context, settings: dict, name: str, remove_role: bool):
+
+        counter = 0
+        to_sync = settings[name]
+        other_server: discord.Guild = self.bot.get_guild(to_sync["other_server"])
+        if not other_server:
+            return await ctx.send(f"Server with ID {to_sync['other_server']} was not found.")
+
+        to_check: discord.Role = other_server.get_role(to_sync["to_check"])
+        to_add: discord.Role = ctx.guild.get_role(to_sync["to_add"])
+        if not to_check:
+            return await ctx.send(f"Role with ID {to_sync['to_check']} in {other_server.name} was not found.")
+        if not to_add:
+            return await ctx.send(f"Role with ID {to_sync['to_add']} was not found.")
+        if to_add >= ctx.guild.me.top_role:
+            return await ctx.send(f"{to_add.mention} is above me in the role hierarchy!")
+
+        async with ctx.typing():
+            async for m in AsyncIter(ctx.guild.members, steps=500):
+                counter += 1
+                other_member: discord.Member = other_server.get_member(m.id)
+
+                if other_member and (to_check in other_member.roles):
+                    if to_add not in m.roles:
+                        await m.add_roles(to_add, reason=f"RoleSync: user has {to_check.name} in {other_server.name}")
+                elif remove_role:
+                    if to_add in m.roles:
+                        await m.remove_roles(to_add, reason=f"RoleSync: user does not have {to_check.name} in {other_server.name}")
+
+        return await ctx.send(f"Force synced {name} for {counter} users on this server.")
 
     @commands.bot_has_permissions(embed_links=True)
     @_role_sync.command(name="view")
